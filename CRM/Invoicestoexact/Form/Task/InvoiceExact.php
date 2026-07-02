@@ -251,7 +251,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         $participantList = $this->getFormattedParticipantList($dao->participant_id, $dao->participant_name, $dao->employer_name);
         $trainingDates = $this->getFormattedTrainingDates($dao->event_id, $dao->event_start_date);
         if (!empty($trainingDates)) {
-          $participantList .= "\nTraining date(s): " . $trainingDates;
+          $participantList .= "\nDatum opleiding: " . $trainingDates;
         }
 
         // get the event code and add the line items
@@ -400,7 +400,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         $timestamp = strtotime($event[$fieldName]);
         if ($timestamp) {
           $sortable = date('Y-m-d', $timestamp);
-          $dateIndex[$sortable] = date('d/m/Y', $timestamp);
+          $dateIndex[$sortable] = $this->formatLocalizedDate($timestamp);
         }
       }
     }
@@ -411,6 +411,59 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
 
     ksort($dateIndex);
     return implode(', ', $dateIndex);
+  }
+
+  private function formatLocalizedDate($timestamp) {
+    if (empty($timestamp) || !is_numeric($timestamp)) {
+      return '';
+    }
+
+    $timestamp = (int) $timestamp;
+    $dateTime = date('Y-m-d H:i:s', $timestamp);
+
+    // 1) Prefer CiviCRM utility formatting so site language settings are respected.
+    if (class_exists('CRM_Utils_Date') && class_exists('CRM_Core_I18n')) {
+      $originalLocale = CRM_Core_I18n::getLocale();
+      $formatted = NULL;
+
+      try {
+        CRM_Core_I18n::singleton()->setLocale('nl_BE');
+        $formatted = CRM_Utils_Date::customFormat($dateTime, '%e %B %Y');
+        if (!empty($formatted)) {
+          $formatted = preg_replace('/\s+/', ' ', trim($formatted));
+        }
+      }
+      catch (Exception $e) {
+      }
+      finally {
+        CRM_Core_I18n::singleton()->setLocale($originalLocale);
+      }
+
+      if (!empty($formatted)) {
+        return $formatted;
+      }
+    }
+
+    // 2) Fallback to locale-aware intl formatting when available.
+    if (class_exists('\\IntlDateFormatter')) {
+      $formatter = new \IntlDateFormatter(
+        'nl_BE',
+        \IntlDateFormatter::LONG,
+        \IntlDateFormatter::NONE,
+        date_default_timezone_get(),
+        \IntlDateFormatter::GREGORIAN,
+        'd MMMM y'
+      );
+      if ($formatter) {
+        $formatted = $formatter->format($timestamp);
+        if ($formatted !== FALSE) {
+          return $formatted;
+        }
+      }
+    }
+
+    // 3) Final fallback when neither CiviCRM nor intl formatting is available.
+    return date('d/m/Y', $timestamp);
   }
 
   private function shouldIncludeTrainingDates($eventStartDate) {
