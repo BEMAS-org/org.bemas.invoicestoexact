@@ -23,6 +23,14 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
   private $_eventNumDaysColumn = '';
   private $_contDataTableName = '';
   private $_invoiceOptionGroupId = '';
+  private $_trainingDateEventFields = [
+    'Activiteit_status.Datum_dag_1',
+    'Activiteit_status.Datum_dag_2',
+    'Activiteit_status.Datum_dag_3',
+    'Activiteit_status.Datum_dag_4',
+    'Activiteit_status.Datum_dag_5',
+    'Activiteit_status.Datum_dag_6',
+  ];
 
   public function __construct() {
     // get custom fields
@@ -181,6 +189,8 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         , part_det.{$this->_partPOColumn} participant_po_number
         , c_det.{$this->_orderNumberColumn} order_number
         , e.title event_title
+        , e.id event_id
+        , e.start_date event_start_date
         , p.id participant_id
         , p.fee_amount event_all_in_price
         , p.role_id
@@ -239,6 +249,10 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         // get the registrations linked to this one
         $extraParticipantCount = $this->getLinkedParticipantCount($dao->participant_id);
         $participantList = $this->getFormattedParticipantList($dao->participant_id, $dao->participant_name, $dao->employer_name);
+        $trainingDates = $this->getFormattedTrainingDates($dao->event_id, $dao->event_start_date);
+        if (!empty($trainingDates)) {
+          $participantList .= "\nTraining date(s): " . $trainingDates;
+        }
 
         // get the event code and add the line items
         $eventExactCodes = $this->getExactEventAndCateringCodes($dao->event_title);
@@ -358,6 +372,54 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     $particiantList = 'Participant(s): ' . $particiantList;
 
     return $particiantList;
+  }
+
+  private function getFormattedTrainingDates($eventId, $eventStartDate) {
+    if (!$this->shouldIncludeTrainingDates($eventStartDate)) {
+      return '';
+    }
+
+    try {
+      $event = \Civi\Api4\Event::get(FALSE)
+        ->addSelect(...$this->_trainingDateEventFields)
+        ->addWhere('id', '=', (int) $eventId)
+        ->execute()
+        ->first();
+    }
+    catch (Exception $e) {
+      return '';
+    }
+
+    if (!$event) {
+      return '';
+    }
+
+    $dateIndex = [];
+    foreach ($this->_trainingDateEventFields as $fieldName) {
+      if (!empty($event[$fieldName])) {
+        $timestamp = strtotime($event[$fieldName]);
+        if ($timestamp) {
+          $sortable = date('Y-m-d', $timestamp);
+          $dateIndex[$sortable] = date('d/m/Y', $timestamp);
+        }
+      }
+    }
+
+    if (empty($dateIndex)) {
+      return '';
+    }
+
+    ksort($dateIndex);
+    return implode(', ', $dateIndex);
+  }
+
+  private function shouldIncludeTrainingDates($eventStartDate) {
+    if (empty($eventStartDate)) {
+      return FALSE;
+    }
+
+    $year = (int) date('Y', strtotime($eventStartDate));
+    return $year >= 2026;
   }
 
   private function addOrReplaceLineItems($contributionID, $participantId, $eventExactCodes, $event_all_in_price, $event_food_price, $event_num_days, $extraParticipantcount) {
