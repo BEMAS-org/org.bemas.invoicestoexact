@@ -10,7 +10,10 @@ class CRM_Invoicestoexact_ExactHelper {
    */
   static function sendInvoice(CRM_Queue_TaskContext $ctx, $contributionID) {
     $exactOL = new CRM_Exactonline_Utils();
-    $exactOL->exactConnection->connect();
+    $isDebugDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
+    if (!$isDebugDryRunEnabled) {
+      $exactOL->exactConnection->connect();
+    }
 
     // get the contribution details
     $contribDetails = CRM_Invoicestoexact_Config::singleton()->getContributionDataCustomGroup('table_name');
@@ -43,18 +46,24 @@ class CRM_Invoicestoexact_ExactHelper {
       ";
       $daoContrib = CRM_Core_DAO::executeQuery($sql);
       if ($daoContrib->fetch()) {
-        // find the customer
-        $customerFinder = new \Picqer\Financials\Exact\Account($exactOL->exactConnection);
-        $c = $customerFinder->filter("trim(Code) eq '" . $daoContrib->exact_id . "'");
-        if (count($c) !== 1) {
-          throw new Exception('klant met exact ID = ' . $daoContrib->exact_id . ' niet gevonden');
-        }
-        $customer = $c[0];
-
         // create the invoice
         $salesInvoice = new \Picqer\Financials\Exact\SalesInvoice($exactOL->exactConnection);
-        $salesInvoice->InvoiceTo = $customer->ID;
-        $salesInvoice->OrderedBy = $customer->ID;
+        if ($isDebugDryRunEnabled) {
+          // Offline dry run: keep local payer code in payload without resolving Exact GUID.
+          $salesInvoice->InvoiceTo = $daoContrib->exact_id;
+          $salesInvoice->OrderedBy = $daoContrib->exact_id;
+        }
+        else {
+          // find the customer
+          $customerFinder = new \Picqer\Financials\Exact\Account($exactOL->exactConnection);
+          $c = $customerFinder->filter("trim(Code) eq '" . $daoContrib->exact_id . "'");
+          if (count($c) !== 1) {
+            throw new Exception('klant met exact ID = ' . $daoContrib->exact_id . ' niet gevonden');
+          }
+          $customer = $c[0];
+          $salesInvoice->InvoiceTo = $customer->ID;
+          $salesInvoice->OrderedBy = $customer->ID;
+        }
         $salesInvoice->Description = $daoContrib->description;
         if ($daoContrib->po) {
           $salesInvoice->YourRef = $daoContrib->po;
@@ -70,17 +79,22 @@ class CRM_Invoicestoexact_ExactHelper {
           if ($daoContribLines->unit_price > 0) {
             $line++;
 
-            // find the product (article)
-            $itemFinder = new \Picqer\Financials\Exact\Item($exactOL->exactConnection);
-            $i = $itemFinder->filter("Code eq '" . $daoContribLines->label . "'");
-            if (count($i) !== 1) {
-              throw new Exception('artikel ' . $daoContribLines->label . ' niet gevonden');
-            }
-            $item = $i[0];
-
             // create the invoice line
             $salesInvoiceLine = new \Picqer\Financials\Exact\SalesInvoiceLine($exactOL->exactConnection);
-            $salesInvoiceLine->Item = $item->ID;
+            if ($isDebugDryRunEnabled) {
+              // Offline dry run: keep local article code in payload without resolving Exact GUID.
+              $salesInvoiceLine->Item = $daoContribLines->label;
+            }
+            else {
+              // find the product (article)
+              $itemFinder = new \Picqer\Financials\Exact\Item($exactOL->exactConnection);
+              $i = $itemFinder->filter("Code eq '" . $daoContribLines->label . "'");
+              if (count($i) !== 1) {
+                throw new Exception('artikel ' . $daoContribLines->label . ' niet gevonden');
+              }
+              $item = $i[0];
+              $salesInvoiceLine->Item = $item->ID;
+            }
             $salesInvoiceLine->Quantity = $daoContribLines->qty;
             $salesInvoiceLine->UnitPrice = $daoContribLines->unit_price;
 
@@ -110,7 +124,6 @@ class CRM_Invoicestoexact_ExactHelper {
         // add the line(s) to the invoice
         $salesInvoice->SalesInvoiceLines = $salesInvoiceLines;
 
-        $isDebugDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
         if ($isDebugDryRunEnabled) {
           $invoicePayload = json_decode($salesInvoice->json(0, TRUE), TRUE);
           Civi::log()->debug('Invoicestoexact payload before insert for contribution ID ' . $contributionID . ': ' . print_r($invoicePayload, TRUE));
