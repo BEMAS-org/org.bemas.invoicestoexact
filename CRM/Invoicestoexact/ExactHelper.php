@@ -1,6 +1,9 @@
 <?php
 
 class CRM_Invoicestoexact_ExactHelper {
+  // Local override for dry-run mode, independent from Exact settings extension.
+  public static $dryRunOverride = FALSE;
+
   /*
    * contact_code
    * item_code
@@ -10,7 +13,8 @@ class CRM_Invoicestoexact_ExactHelper {
    */
   static function sendInvoice(CRM_Queue_TaskContext $ctx, $contributionID) {
     $exactOL = new CRM_Exactonline_Utils();
-    $isDebugDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
+    $isSettingDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
+    $isDebugDryRunEnabled = self::$dryRunOverride || $isSettingDryRunEnabled;
     if (!$isDebugDryRunEnabled) {
       $exactOL->exactConnection->connect();
     }
