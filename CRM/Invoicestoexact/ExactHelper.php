@@ -110,6 +110,18 @@ class CRM_Invoicestoexact_ExactHelper {
         // add the line(s) to the invoice
         $salesInvoice->SalesInvoiceLines = $salesInvoiceLines;
 
+        $isDebugDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
+        if ($isDebugDryRunEnabled) {
+          $invoicePayload = json_decode($salesInvoice->json(0, TRUE), TRUE);
+          Civi::log()->debug('Invoicestoexact payload before insert for contribution ID ' . $contributionID . ': ' . print_r($invoicePayload, TRUE));
+
+          // Dry run mode: log payload but do not send anything to Exact.
+          self::saveContributionCustomData($sentErrorCustomFieldId, 0, $contributionID);
+          self::saveContributionCustomData($errorMessageCustomFieldId, 'Dry run actief: payload gelogd, factuur niet doorgestuurd naar Exact.', $contributionID);
+
+          return TRUE;
+        }
+
         // send to Exact!
         $s = $salesInvoice->insert();
 
