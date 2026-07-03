@@ -2,7 +2,7 @@
 
 class CRM_Invoicestoexact_ExactHelper {
   // Local override for dry-run mode, independent from Exact settings extension.
-  public static $dryRunOverride = FALSE;
+  public static $dryRunOverride = TRUE;
 
   /*
    * contact_code

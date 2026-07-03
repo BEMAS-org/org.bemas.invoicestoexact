@@ -479,13 +479,29 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     $sql = "select * from civicrm_line_item where contribution_id = $contributionID order by id";
     $dao = CRM_Core_DAO::executeQuery($sql);
 
+    $lineItems = [];
+    while ($dao->fetch()) {
+      $lineItems[] = [
+        'id' => (int) $dao->id,
+        'label' => (string) $dao->label,
+        'unit_price' => (float) $dao->unit_price,
+      ];
+    }
+
+    // Scenario 1 (compatibility mode): if line items are already split upstream
+    // (event + CAT-* line), keep them as-is and do not re-shape in this extension.
+    if ($this->hasPreSplitEventAndCateringLines($lineItems)
+      || $this->hasPreparedSingleEventLine($lineItems, $eventExactCodes['event_code'], $event_food_price)) {
+      return;
+    }
+
     // make sure the number of days is a number
     if ($event_num_days == '') {
       $event_num_days = 1;
     }
 
     $i = 0;
-    while ($dao->fetch()) {
+    foreach ($lineItems as $lineItem) {
       $i++;
 
       if ($i == 1) {
@@ -493,7 +509,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         $unitPrice = $event_all_in_price - ($event_food_price * $event_num_days);
         $sqlUpdate = "update civicrm_line_item set label = %2, qty = %3, unit_price = %4, line_total = %5 where id = %1";
         $sqlUpdateParams = [
-          1 => [$dao->id, 'Integer'],
+          1 => [$lineItem['id'], 'Integer'],
           2 => [$eventExactCodes['event_code'], 'String'],
           3 => [1 + $extraParticipantcount, 'Integer'],
           4 => [$unitPrice, 'Money'],
@@ -505,7 +521,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         // the second line item is catering
         $sqlUpdate = "update civicrm_line_item set label = %2, qty = %3, unit_price = %4, line_total = %5, price_field_id = 1 where id = %1";
         $sqlUpdateParams = [
-          1 => [$dao->id, 'Integer'],
+          1 => [$lineItem['id'], 'Integer'],
           2 => [$eventExactCodes['catering_food'], 'String'],
           3 => [1 + $extraParticipantcount, 'Integer'],
           4 => [$event_food_price * $event_num_days, 'Money'],
@@ -536,6 +552,65 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         civicrm_api3('LineItem', 'create', $params);
       }
     }
+  }
+
+  /**
+   * Detect if contribution line-items are already split into event and catering lines.
+   *
+   * @param array $lineItems
+   * @return bool
+   */
+  private function hasPreSplitEventAndCateringLines($lineItems) {
+    $hasEventLine = FALSE;
+    $hasCateringLine = FALSE;
+
+    foreach ($lineItems as $lineItem) {
+      if ((float) ($lineItem['unit_price'] ?? 0) <= 0) {
+        continue;
+      }
+
+      $label = strtoupper(trim((string) ($lineItem['label'] ?? '')));
+      if (strpos($label, 'CAT-') === 0) {
+        $hasCateringLine = TRUE;
+      }
+      else {
+        $hasEventLine = TRUE;
+      }
+
+      if ($hasEventLine && $hasCateringLine) {
+        return TRUE;
+      }
+    }
+
+    return FALSE;
+  }
+
+  /**
+   * Detect if contribution is already correctly prepared for no-catering scenario.
+   *
+   * @param array $lineItems
+   * @param string $eventCode
+   * @param float|int|string $eventFoodPrice
+   * @return bool
+   */
+  private function hasPreparedSingleEventLine($lineItems, $eventCode, $eventFoodPrice) {
+    if ((float) $eventFoodPrice > 0) {
+      return FALSE;
+    }
+
+    $positiveLines = [];
+    foreach ($lineItems as $lineItem) {
+      if ((float) ($lineItem['unit_price'] ?? 0) > 0) {
+        $positiveLines[] = $lineItem;
+      }
+    }
+
+    if (count($positiveLines) !== 1) {
+      return FALSE;
+    }
+
+    $label = trim((string) ($positiveLines[0]['label'] ?? ''));
+    return strtoupper($label) === strtoupper((string) $eventCode);
   }
 
   private function buildDataMembership($contributionID) {
