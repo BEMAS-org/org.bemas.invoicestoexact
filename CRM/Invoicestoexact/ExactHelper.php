@@ -4,6 +4,12 @@ class CRM_Invoicestoexact_ExactHelper {
   // Local override for dry-run mode, independent from Exact settings extension.
   public static $dryRunOverride = TRUE;
 
+  public static function isDebugDryRunEnabled() {
+    $exactOL = new CRM_Exactonline_Utils();
+    $isSettingDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
+    return self::$dryRunOverride || $isSettingDryRunEnabled;
+  }
+
   /*
    * contact_code
    * item_code
@@ -13,8 +19,7 @@ class CRM_Invoicestoexact_ExactHelper {
    */
   static function sendInvoice(CRM_Queue_TaskContext $ctx, $contributionID) {
     $exactOL = new CRM_Exactonline_Utils();
-    $isSettingDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
-    $isDebugDryRunEnabled = self::$dryRunOverride || $isSettingDryRunEnabled;
+    $isDebugDryRunEnabled = self::isDebugDryRunEnabled();
     if (!$isDebugDryRunEnabled) {
       $exactOL->exactConnection->connect();
     }
@@ -131,6 +136,16 @@ class CRM_Invoicestoexact_ExactHelper {
         if ($isDebugDryRunEnabled) {
           $invoicePayload = json_decode($salesInvoice->json(0, TRUE), TRUE);
           Civi::log()->debug('Invoicestoexact payload before insert for contribution ID ' . $contributionID . ': ' . print_r($invoicePayload, TRUE));
+
+          // Also surface the payload on-screen (dry run) for quick inspection,
+          // in addition to the CiviCRM log.
+          $payloadText = json_encode($invoicePayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+          CRM_Core_Session::setStatus(
+            '<pre>' . htmlspecialchars((string) $payloadText, ENT_QUOTES) . '</pre>',
+            ts('Exact payload (dry run) - contribution %1', [1 => $contributionID]),
+            'info',
+            ['expires' => 0]
+          );
 
           // Dry run mode: log payload but do not send anything to Exact.
           self::saveContributionCustomData($sentErrorCustomFieldId, 0, $contributionID);
