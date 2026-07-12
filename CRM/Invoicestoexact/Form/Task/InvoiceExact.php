@@ -413,24 +413,36 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     return implode(', ', $dateIndex);
   }
 
-  private function formatLocalizedDate($timestamp) {
+  /**
+   * Format a training date for display in the invoice notes.
+   *
+   * Supported values for $format:
+   *   'numeric' (default) - d/m/Y, e.g. 24/06/2026
+   *   'civi'              - full month name via CiviCRM + nl_BE locale switch, e.g. 24 juni 2026
+   *   'intl'              - full month name via PHP Intl extension + nl_BE, e.g. 24 juni 2026
+   *
+   * 'civi' and 'intl' fall back to 'numeric' when the required extension/class is unavailable.
+   *
+   * @param int $timestamp Unix timestamp.
+   * @param string $format One of 'numeric', 'civi', 'intl'.
+   * @return string
+   */
+  private function formatLocalizedDate($timestamp, $format = 'numeric') {
     if (empty($timestamp) || !is_numeric($timestamp)) {
       return '';
     }
 
     $timestamp = (int) $timestamp;
-    $dateTime = date('Y-m-d H:i:s', $timestamp);
 
-    // 1) Prefer CiviCRM utility formatting so site language settings are respected.
-    if (class_exists('CRM_Utils_Date') && class_exists('CRM_Core_I18n')) {
+    if ($format === 'civi' && class_exists('CRM_Utils_Date') && class_exists('CRM_Core_I18n')) {
       $originalLocale = CRM_Core_I18n::getLocale();
       $formatted = NULL;
 
       try {
         CRM_Core_I18n::singleton()->setLocale('nl_BE');
-        $formatted = CRM_Utils_Date::customFormat($dateTime, '%e %B %Y');
-        if (!empty($formatted)) {
-          $formatted = preg_replace('/\s+/', ' ', trim($formatted));
+        $result = CRM_Utils_Date::customFormat(date('Y-m-d H:i:s', $timestamp), '%e %B %Y');
+        if (!empty($result)) {
+          $formatted = preg_replace('/\s+/', ' ', trim($result));
         }
       }
       catch (Exception $e) {
@@ -444,8 +456,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
       }
     }
 
-    // 2) Fallback to locale-aware intl formatting when available.
-    if (class_exists('\\IntlDateFormatter')) {
+    if ($format === 'intl' && class_exists('\\IntlDateFormatter')) {
       $formatter = new \IntlDateFormatter(
         'nl_BE',
         \IntlDateFormatter::LONG,
@@ -455,14 +466,13 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         'd MMMM y'
       );
       if ($formatter) {
-        $formatted = $formatter->format($timestamp);
-        if ($formatted !== FALSE) {
-          return $formatted;
+        $result = $formatter->format($timestamp);
+        if ($result !== FALSE) {
+          return $result;
         }
       }
     }
 
-    // 3) Final fallback when neither CiviCRM nor intl formatting is available.
     return date('d/m/Y', $timestamp);
   }
 
