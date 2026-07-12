@@ -2,7 +2,8 @@
 
 class CRM_Invoicestoexact_ExactHelper {
   // Local override for dry-run mode, independent from Exact settings extension.
-  public static $dryRunOverride = TRUE;
+  // Set to TRUE only when you want to force dry-run regardless of the Exact Online extension setting.
+  public static $dryRunOverride = FALSE;
 
   public static function isDebugDryRunEnabled() {
     $exactOL = new CRM_Exactonline_Utils();
