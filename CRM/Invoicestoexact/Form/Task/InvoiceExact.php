@@ -181,6 +181,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
       SELECT
         c.id contribution_id
         , contact_a.id contact_id
+        , contact_a.preferred_language contact_preferred_language
         , concat(contact_a.first_name, ' ', contact_a.last_name) participant_name
         , empl.id employer_id
         , empl.organization_name employer_name
@@ -251,7 +252,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         $participantList = $this->getFormattedParticipantList($dao->participant_id, $dao->participant_name, $dao->employer_name);
         $trainingDates = $this->getFormattedTrainingDates($dao->event_id, $dao->event_start_date);
         if (!empty($trainingDates)) {
-          $participantList .= "\nDatum opleiding: " . $trainingDates;
+          $participantList .= "\n" . $this->getTrainingDateLabel($dao->contact_preferred_language) . ': ' . $trainingDates;
         }
 
         // get the event code and add the line items
@@ -483,6 +484,19 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
 
     $year = (int) date('Y', strtotime($eventStartDate));
     return $year >= 2026;
+  }
+
+  private function getTrainingDateLabel($preferredLanguage) {
+    $language = strtolower((string) $preferredLanguage);
+
+    if (strpos($language, 'fr') === 0) {
+      return 'Date(s) de formation';
+    }
+    if (strpos($language, 'en') === 0) {
+      return 'Training date(s)';
+    }
+
+    return 'Datum(s) opleiding';
   }
 
   private function addOrReplaceLineItems($contributionID, $participantId, $eventExactCodes, $event_all_in_price, $event_food_price, $event_num_days, $extraParticipantcount) {
