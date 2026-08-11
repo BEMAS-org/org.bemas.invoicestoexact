@@ -23,6 +23,14 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
   private $_eventNumDaysColumn = '';
   private $_contDataTableName = '';
   private $_invoiceOptionGroupId = '';
+  private $_trainingDateEventFields = [
+    'Activiteit_status.Datum_dag_1',
+    'Activiteit_status.Datum_dag_2',
+    'Activiteit_status.Datum_dag_3',
+    'Activiteit_status.Datum_dag_4',
+    'Activiteit_status.Datum_dag_5',
+    'Activiteit_status.Datum_dag_6',
+  ];
 
   public function __construct() {
     // get custom fields
@@ -173,6 +181,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
       SELECT
         c.id contribution_id
         , contact_a.id contact_id
+        , contact_a.preferred_language contact_preferred_language
         , concat(contact_a.first_name, ' ', contact_a.last_name) participant_name
         , empl.id employer_id
         , empl.organization_name employer_name
@@ -181,6 +190,8 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         , part_det.{$this->_partPOColumn} participant_po_number
         , c_det.{$this->_orderNumberColumn} order_number
         , e.title event_title
+        , e.id event_id
+        , e.start_date event_start_date
         , p.id participant_id
         , p.fee_amount event_all_in_price
         , p.role_id
@@ -239,6 +250,10 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         // get the registrations linked to this one
         $extraParticipantCount = $this->getLinkedParticipantCount($dao->participant_id);
         $participantList = $this->getFormattedParticipantList($dao->participant_id, $dao->participant_name, $dao->employer_name);
+        $trainingDates = $this->getFormattedTrainingDates($dao->event_id, $dao->event_start_date);
+        if (!empty($trainingDates)) {
+          $participantList .= "\n" . $this->getTrainingDateLabel($dao->contact_preferred_language) . ': ' . $trainingDates;
+        }
 
         // get the event code and add the line items
         $eventExactCodes = $this->getExactEventAndCateringCodes($dao->event_title);
@@ -360,9 +375,149 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     return $particiantList;
   }
 
+  private function getFormattedTrainingDates($eventId, $eventStartDate) {
+    if (!$this->shouldIncludeTrainingDates($eventStartDate)) {
+      return '';
+    }
+
+    try {
+      $event = \Civi\Api4\Event::get(FALSE)
+        ->addSelect(...$this->_trainingDateEventFields)
+        ->addWhere('id', '=', (int) $eventId)
+        ->execute()
+        ->first();
+    }
+    catch (Exception $e) {
+      return '';
+    }
+
+    if (!$event) {
+      return '';
+    }
+
+    $dateIndex = [];
+    foreach ($this->_trainingDateEventFields as $fieldName) {
+      if (!empty($event[$fieldName])) {
+        $timestamp = strtotime($event[$fieldName]);
+        if ($timestamp) {
+          $sortable = date('Y-m-d', $timestamp);
+          $dateIndex[$sortable] = $this->formatLocalizedDate($timestamp);
+        }
+      }
+    }
+
+    if (empty($dateIndex)) {
+      return '';
+    }
+
+    ksort($dateIndex);
+    return implode(', ', $dateIndex);
+  }
+
+  /**
+   * Format a training date for display in the invoice notes.
+   *
+   * Supported values for $format:
+   *   'numeric' (default) - d/m/Y, e.g. 24/06/2026
+   *   'civi'              - full month name via CiviCRM + nl_BE locale switch, e.g. 24 juni 2026
+   *   'intl'              - full month name via PHP Intl extension + nl_BE, e.g. 24 juni 2026
+   *
+   * 'civi' and 'intl' fall back to 'numeric' when the required extension/class is unavailable.
+   *
+   * @param int $timestamp Unix timestamp.
+   * @param string $format One of 'numeric', 'civi', 'intl'.
+   * @return string
+   */
+  private function formatLocalizedDate($timestamp, $format = 'numeric') {
+    if (empty($timestamp) || !is_numeric($timestamp)) {
+      return '';
+    }
+
+    $timestamp = (int) $timestamp;
+
+    if ($format === 'civi' && class_exists('CRM_Utils_Date') && class_exists('CRM_Core_I18n')) {
+      $originalLocale = CRM_Core_I18n::getLocale();
+      $formatted = NULL;
+
+      try {
+        CRM_Core_I18n::singleton()->setLocale('nl_BE');
+        $result = CRM_Utils_Date::customFormat(date('Y-m-d H:i:s', $timestamp), '%e %B %Y');
+        if (!empty($result)) {
+          $formatted = preg_replace('/\s+/', ' ', trim($result));
+        }
+      }
+      catch (Exception $e) {
+      }
+      finally {
+        CRM_Core_I18n::singleton()->setLocale($originalLocale);
+      }
+
+      if (!empty($formatted)) {
+        return $formatted;
+      }
+    }
+
+    if ($format === 'intl' && class_exists('\\IntlDateFormatter')) {
+      $formatter = new \IntlDateFormatter(
+        'nl_BE',
+        \IntlDateFormatter::LONG,
+        \IntlDateFormatter::NONE,
+        date_default_timezone_get(),
+        \IntlDateFormatter::GREGORIAN,
+        'd MMMM y'
+      );
+      if ($formatter) {
+        $result = $formatter->format($timestamp);
+        if ($result !== FALSE) {
+          return $result;
+        }
+      }
+    }
+
+    return date('d/m/Y', $timestamp);
+  }
+
+  private function shouldIncludeTrainingDates($eventStartDate) {
+    if (empty($eventStartDate)) {
+      return FALSE;
+    }
+
+    $year = (int) date('Y', strtotime($eventStartDate));
+    return $year >= 2026;
+  }
+
+  private function getTrainingDateLabel($preferredLanguage) {
+    $language = strtolower((string) $preferredLanguage);
+
+    if (strpos($language, 'fr') === 0) {
+      return 'Date(s) de formation';
+    }
+    if (strpos($language, 'en') === 0) {
+      return 'Training date(s)';
+    }
+
+    return 'Datum(s) opleiding';
+  }
+
   private function addOrReplaceLineItems($contributionID, $participantId, $eventExactCodes, $event_all_in_price, $event_food_price, $event_num_days, $extraParticipantcount) {
     $sql = "select * from civicrm_line_item where contribution_id = $contributionID order by id";
     $dao = CRM_Core_DAO::executeQuery($sql);
+
+    $lineItems = [];
+    while ($dao->fetch()) {
+      $lineItems[] = [
+        'id' => (int) $dao->id,
+        'label' => (string) $dao->label,
+        'unit_price' => (float) $dao->unit_price,
+      ];
+    }
+
+    // Scenario 1 (compatibility mode): if line items are already split upstream
+    // (event + CAT-* line), keep them as-is and do not re-shape in this extension.
+    if ($this->hasPreSplitEventAndCateringLines($lineItems)
+      || $this->hasPreparedSingleEventLine($lineItems, $eventExactCodes['event_code'], $event_food_price)) {
+      return;
+    }
 
     // make sure the number of days is a number
     if ($event_num_days == '') {
@@ -370,7 +525,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     }
 
     $i = 0;
-    while ($dao->fetch()) {
+    foreach ($lineItems as $lineItem) {
       $i++;
 
       if ($i == 1) {
@@ -378,7 +533,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         $unitPrice = $event_all_in_price - ($event_food_price * $event_num_days);
         $sqlUpdate = "update civicrm_line_item set label = %2, qty = %3, unit_price = %4, line_total = %5 where id = %1";
         $sqlUpdateParams = [
-          1 => [$dao->id, 'Integer'],
+          1 => [$lineItem['id'], 'Integer'],
           2 => [$eventExactCodes['event_code'], 'String'],
           3 => [1 + $extraParticipantcount, 'Integer'],
           4 => [$unitPrice, 'Money'],
@@ -390,7 +545,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         // the second line item is catering
         $sqlUpdate = "update civicrm_line_item set label = %2, qty = %3, unit_price = %4, line_total = %5, price_field_id = 1 where id = %1";
         $sqlUpdateParams = [
-          1 => [$dao->id, 'Integer'],
+          1 => [$lineItem['id'], 'Integer'],
           2 => [$eventExactCodes['catering_food'], 'String'],
           3 => [1 + $extraParticipantcount, 'Integer'],
           4 => [$event_food_price * $event_num_days, 'Money'],
@@ -421,6 +576,65 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         civicrm_api3('LineItem', 'create', $params);
       }
     }
+  }
+
+  /**
+   * Detect if contribution line-items are already split into event and catering lines.
+   *
+   * @param array $lineItems
+   * @return bool
+   */
+  private function hasPreSplitEventAndCateringLines($lineItems) {
+    $hasEventLine = FALSE;
+    $hasCateringLine = FALSE;
+
+    foreach ($lineItems as $lineItem) {
+      if ((float) ($lineItem['unit_price'] ?? 0) <= 0) {
+        continue;
+      }
+
+      $label = strtoupper(trim((string) ($lineItem['label'] ?? '')));
+      if (strpos($label, 'CAT-') === 0) {
+        $hasCateringLine = TRUE;
+      }
+      else {
+        $hasEventLine = TRUE;
+      }
+
+      if ($hasEventLine && $hasCateringLine) {
+        return TRUE;
+      }
+    }
+
+    return FALSE;
+  }
+
+  /**
+   * Detect if contribution is already correctly prepared for no-catering scenario.
+   *
+   * @param array $lineItems
+   * @param string $eventCode
+   * @param float|int|string $eventFoodPrice
+   * @return bool
+   */
+  private function hasPreparedSingleEventLine($lineItems, $eventCode, $eventFoodPrice) {
+    if ((float) $eventFoodPrice > 0) {
+      return FALSE;
+    }
+
+    $positiveLines = [];
+    foreach ($lineItems as $lineItem) {
+      if ((float) ($lineItem['unit_price'] ?? 0) > 0) {
+        $positiveLines[] = $lineItem;
+      }
+    }
+
+    if (count($positiveLines) !== 1) {
+      return FALSE;
+    }
+
+    $label = trim((string) ($positiveLines[0]['label'] ?? ''));
+    return strtoupper($label) === strtoupper((string) $eventCode);
   }
 
   private function buildDataMembership($contributionID) {

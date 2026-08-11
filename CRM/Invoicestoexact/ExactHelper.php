@@ -1,6 +1,16 @@
 <?php
 
 class CRM_Invoicestoexact_ExactHelper {
+  // Local override for dry-run mode, independent from Exact settings extension.
+  // Set to TRUE only when you want to force dry-run regardless of the Exact Online extension setting.
+  public static $dryRunOverride = FALSE;
+
+  public static function isDebugDryRunEnabled() {
+    $exactOL = new CRM_Exactonline_Utils();
+    $isSettingDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
+    return self::$dryRunOverride || $isSettingDryRunEnabled;
+  }
+
   /*
    * contact_code
    * item_code
@@ -10,7 +20,10 @@ class CRM_Invoicestoexact_ExactHelper {
    */
   static function sendInvoice(CRM_Queue_TaskContext $ctx, $contributionID) {
     $exactOL = new CRM_Exactonline_Utils();
-    $exactOL->exactConnection->connect();
+    $isDebugDryRunEnabled = self::isDebugDryRunEnabled();
+    if (!$isDebugDryRunEnabled) {
+      $exactOL->exactConnection->connect();
+    }
 
     // get the contribution details
     $contribDetails = CRM_Invoicestoexact_Config::singleton()->getContributionDataCustomGroup('table_name');
@@ -43,18 +56,24 @@ class CRM_Invoicestoexact_ExactHelper {
       ";
       $daoContrib = CRM_Core_DAO::executeQuery($sql);
       if ($daoContrib->fetch()) {
-        // find the customer
-        $customerFinder = new \Picqer\Financials\Exact\Account($exactOL->exactConnection);
-        $c = $customerFinder->filter("trim(Code) eq '" . $daoContrib->exact_id . "'");
-        if (count($c) !== 1) {
-          throw new Exception('klant met exact ID = ' . $daoContrib->exact_id . ' niet gevonden');
-        }
-        $customer = $c[0];
-
         // create the invoice
         $salesInvoice = new \Picqer\Financials\Exact\SalesInvoice($exactOL->exactConnection);
-        $salesInvoice->InvoiceTo = $customer->ID;
-        $salesInvoice->OrderedBy = $customer->ID;
+        if ($isDebugDryRunEnabled) {
+          // Offline dry run: keep local payer code in payload without resolving Exact GUID.
+          $salesInvoice->InvoiceTo = $daoContrib->exact_id;
+          $salesInvoice->OrderedBy = $daoContrib->exact_id;
+        }
+        else {
+          // find the customer
+          $customerFinder = new \Picqer\Financials\Exact\Account($exactOL->exactConnection);
+          $c = $customerFinder->filter("trim(Code) eq '" . $daoContrib->exact_id . "'");
+          if (count($c) !== 1) {
+            throw new Exception('klant met exact ID = ' . $daoContrib->exact_id . ' niet gevonden');
+          }
+          $customer = $c[0];
+          $salesInvoice->InvoiceTo = $customer->ID;
+          $salesInvoice->OrderedBy = $customer->ID;
+        }
         $salesInvoice->Description = $daoContrib->description;
         if ($daoContrib->po) {
           $salesInvoice->YourRef = $daoContrib->po;
@@ -70,17 +89,22 @@ class CRM_Invoicestoexact_ExactHelper {
           if ($daoContribLines->unit_price > 0) {
             $line++;
 
-            // find the product (article)
-            $itemFinder = new \Picqer\Financials\Exact\Item($exactOL->exactConnection);
-            $i = $itemFinder->filter("Code eq '" . $daoContribLines->label . "'");
-            if (count($i) !== 1) {
-              throw new Exception('artikel ' . $daoContribLines->label . ' niet gevonden');
-            }
-            $item = $i[0];
-
             // create the invoice line
             $salesInvoiceLine = new \Picqer\Financials\Exact\SalesInvoiceLine($exactOL->exactConnection);
-            $salesInvoiceLine->Item = $item->ID;
+            if ($isDebugDryRunEnabled) {
+              // Offline dry run: keep local article code in payload without resolving Exact GUID.
+              $salesInvoiceLine->Item = $daoContribLines->label;
+            }
+            else {
+              // find the product (article)
+              $itemFinder = new \Picqer\Financials\Exact\Item($exactOL->exactConnection);
+              $i = $itemFinder->filter("Code eq '" . $daoContribLines->label . "'");
+              if (count($i) !== 1) {
+                throw new Exception('artikel ' . $daoContribLines->label . ' niet gevonden');
+              }
+              $item = $i[0];
+              $salesInvoiceLine->Item = $item->ID;
+            }
             $salesInvoiceLine->Quantity = $daoContribLines->qty;
             $salesInvoiceLine->UnitPrice = $daoContribLines->unit_price;
 
@@ -109,6 +133,27 @@ class CRM_Invoicestoexact_ExactHelper {
 
         // add the line(s) to the invoice
         $salesInvoice->SalesInvoiceLines = $salesInvoiceLines;
+
+        if ($isDebugDryRunEnabled) {
+          $invoicePayload = json_decode($salesInvoice->json(0, TRUE), TRUE);
+          Civi::log()->debug('Invoicestoexact payload before insert for contribution ID ' . $contributionID . ': ' . print_r($invoicePayload, TRUE));
+
+          // Also surface the payload on-screen (dry run) for quick inspection,
+          // in addition to the CiviCRM log.
+          $payloadText = json_encode($invoicePayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+          CRM_Core_Session::setStatus(
+            '<pre>' . htmlspecialchars((string) $payloadText, ENT_QUOTES) . '</pre>',
+            ts('Exact payload (dry run) - contribution %1', [1 => $contributionID]),
+            'info',
+            ['expires' => 0]
+          );
+
+          // Dry run mode: log payload but do not send anything to Exact.
+          self::saveContributionCustomData($sentErrorCustomFieldId, 0, $contributionID);
+          self::saveContributionCustomData($errorMessageCustomFieldId, 'Dry run actief: payload gelogd, factuur niet doorgestuurd naar Exact.', $contributionID);
+
+          return TRUE;
+        }
 
         // send to Exact!
         $s = $salesInvoice->insert();
