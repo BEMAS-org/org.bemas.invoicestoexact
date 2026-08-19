@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Label translation was generalized in invoice-note generation: the helper now translates multiple predefined labels by language (including both the training-date label and the participant label), with Dutch as fallback.
+
 ## 1.0.0
 
 - Dry-run mode was introduced and hardened for safer testing: activation via variable, no Exact connection during dry runs, clearer output, and minor bug fixes.
