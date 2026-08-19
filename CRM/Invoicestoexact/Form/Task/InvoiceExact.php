@@ -249,10 +249,10 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
 
         // get the registrations linked to this one
         $extraParticipantCount = $this->getLinkedParticipantCount($dao->participant_id);
-        $participantList = $this->getFormattedParticipantList($dao->participant_id, $dao->participant_name, $dao->employer_name);
+        $participantList = $this->getFormattedParticipantList($dao->participant_id, $dao->participant_name, $dao->employer_name, $dao->contact_preferred_language);
         $trainingDates = $this->getFormattedTrainingDates($dao->event_id, $dao->event_start_date);
         if (!empty($trainingDates)) {
-          $participantList .= "\n" . $this->getTrainingDateLabel($dao->contact_preferred_language) . ': ' . $trainingDates;
+          $participantList .= "\n" . $this->translateLabel($dao->contact_preferred_language, 'Datum(s) opleiding') . ': ' . $trainingDates;
         }
 
         // get the event code and add the line items
@@ -326,7 +326,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     return $count;
   }
 
-  private function getFormattedParticipantList($participant_id, $participant_name, $employer_name) {
+  private function getFormattedParticipantList($participant_id, $participant_name, $employer_name, $preferredLanguage = NULL) {
     // create array with key = employer, and value = array or participants
     $empl = [];
     $empl[$employer_name] = [$participant_name];
@@ -361,18 +361,18 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
 
     // format the participant list
     // e.g. Participant(s): XYZ - Jef, Jos; ABC - Annick
-    $particiantList = '';
+    $participantList = '';
     foreach ($empl as $k => $v) {
-      if ($particiantList != '') {
+      if ($participantList != '') {
         // add separator
-        $particiantList .= '; ';
+        $participantList .= '; ';
       }
 
-      $particiantList .= $k . ' - ' . implode(', ', $v);
+      $participantList .= $k . ' - ' . implode(', ', $v);
     }
-    $particiantList = 'Participant(s): ' . $particiantList;
+    $participantList = $this->translateLabel($preferredLanguage, 'Participant(s)') . ': ' . $participantList;
 
-    return $particiantList;
+    return $participantList;
   }
 
   private function getFormattedTrainingDates($eventId, $eventStartDate) {
@@ -486,17 +486,46 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     return $year >= 2026;
   }
 
-  private function getTrainingDateLabel($preferredLanguage) {
+  /**
+   * Translate predefined invoice labels based on preferred language.
+   *
+   * Falls back to Dutch when no French or English preference is detected.
+   * Returns the original label when no translation mapping exists.
+   *
+   * @param string|null $preferredLanguage Contact preferred language code (e.g. nl_BE, fr_FR, en_GB).
+   * @param string $label Source label key.
+   * @return string
+   */
+  private function translateLabel($preferredLanguage, $label) {
     $language = strtolower((string) $preferredLanguage);
 
-    if (strpos($language, 'fr') === 0) {
-      return 'Date(s) de formation';
-    }
-    if (strpos($language, 'en') === 0) {
-      return 'Training date(s)';
+    $translations = [
+      'Datum(s) opleiding' => [
+        'fr' => 'Date(s) de formation',
+        'en' => 'Training date(s)',
+        'nl' => 'Datum(s) opleiding',
+      ],
+      'Participant(s)' => [
+        'fr' => 'Participant(s)',
+        'en' => 'Participant(s)',
+        'nl' => 'Deelnemer(s)',
+      ],
+    ];
+
+    if (!isset($translations[$label])) {
+      return $label;
     }
 
-    return 'Datum(s) opleiding';
+    $labelTranslations = $translations[$label];
+
+    if (strpos($language, 'fr') === 0) {
+      return $labelTranslations['fr'];
+    }
+    if (strpos($language, 'en') === 0) {
+      return $labelTranslations['en'];
+    }
+
+    return $labelTranslations['nl'];
   }
 
   private function addOrReplaceLineItems($contributionID, $participantId, $eventExactCodes, $event_all_in_price, $event_food_price, $event_num_days, $extraParticipantcount) {
