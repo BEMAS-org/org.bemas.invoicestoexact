@@ -919,7 +919,10 @@ Employee(s) currently designated as member contact(s) in our records:\n\n";
     // make sure the code starts with TT, TC, T, A, E
     $firstTwoLetters = substr($eventCode[0],0, 2);
     $firstLetter = substr($eventCode[0],0, 1);
-    if ($firstTwoLetters == 'TC' || $firstTwoLetters == 'TT' || $firstTwoLetters == 'OT') {
+    if ($firstTwoLetters == 'TT') {
+      $returnArr['catering_food'] = 'CAT-T'; // exception Emilie dd. 18 September 2026
+    }
+    elseif ($firstTwoLetters == 'TC' || $firstTwoLetters == 'OT') {
       $returnArr['catering_food'] = 'CAT-' . $firstTwoLetters;
     }
     elseif ($firstLetter == 'T' || $firstLetter == 'A' || $firstLetter == 'E') {
