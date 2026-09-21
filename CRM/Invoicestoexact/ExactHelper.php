@@ -183,6 +183,17 @@ class CRM_Invoicestoexact_ExactHelper {
         self::saveContributionCustomData($errorMessageCustomFieldId, $e->getMessage(), $contributionID);
       }
 
+      // Surface the failure on-screen. Queued tasks run via AJAX with no per-item
+      // page reload, but CiviCRM accumulates session statuses and shows them all
+      // on the page the queue runner redirects to once the batch finishes - so
+      // this is visible even though errorMode is ERROR_CONTINUE (queue keeps going).
+      CRM_Core_Session::setStatus(
+        htmlspecialchars((string) $e->getMessage(), ENT_QUOTES),
+        ts('Exact fout - bijdrage %1', [1 => $contributionID]),
+        'error',
+        ['expires' => 0]
+      );
+
       return FALSE;
     }
 

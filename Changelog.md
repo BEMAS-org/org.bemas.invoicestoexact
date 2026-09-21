@@ -1,5 +1,7 @@
 # Changelog
 
+- Restored an on-screen error notification when sending a contribution to Exact fails (e.g. item or cost centre not found): previously the failure was only recorded silently on the contribution's custom fields, with no visible warning that nothing was sent to Exact.
+
 ## 1.0.1
 
 - Label translation was generalized in invoice-note generation: the helper now translates multiple predefined labels by language (including both the training-date label and the participant label), with Dutch as fallback.
