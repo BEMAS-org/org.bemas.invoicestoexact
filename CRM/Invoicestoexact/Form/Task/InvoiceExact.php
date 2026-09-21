@@ -21,6 +21,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
   private $_eventDetTableName = '';
   private $_eventFoodCostColumn = '';
   private $_eventNumDaysColumn = '';
+  private $_eventCateringDaysColumn = '';
   private $_contDataTableName = '';
   private $_invoiceOptionGroupId = '';
   private $_trainingDateEventFields = [
@@ -45,6 +46,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
     $this->_eventDetTableName = CRM_Invoicestoexact_Config::singleton()->getEventDetailsCustomGroup('table_name');
     $this->_eventFoodCostColumn = CRM_Invoicestoexact_Config::singleton()->getEventFoodCostCustomField('column_name');
     $this->_eventNumDaysColumn = CRM_Invoicestoexact_Config::singleton()->getEventNumDaysCustomField('column_name');
+    $this->_eventCateringDaysColumn = CRM_Invoicestoexact_Config::singleton()->getEventCateringDaysCustomField('column_name');
     parent::__construct();
   }
 
@@ -197,7 +199,7 @@ class CRM_Invoicestoexact_Form_Task_InvoiceExact extends CRM_Contribute_Form_Tas
         , p.role_id
         , p.status_id
         , ifnull(e_det.{$this->_eventFoodCostColumn}, 0) event_food_price
-        , ifnull(e_det.{$this->_eventNumDaysColumn}, 1) event_num_days
+        , ifnull(e_det.{$this->_eventCateringDaysColumn}, ifnull(e_det.{$this->_eventNumDaysColumn}, 1)) event_num_days
       FROM
         civicrm_contribution c
       INNER JOIN
@@ -917,18 +919,12 @@ Employee(s) currently designated as member contact(s) in our records:\n\n";
     $returnArr['event_code'] = $eventCode[0];
 
     // make sure the code starts with TT, TC, T, A, E
-    $firstTwoLetters = substr($eventCode[0],0, 2);
-    $firstLetter = substr($eventCode[0],0, 1);
-    if ($firstTwoLetters == 'TC' || $firstTwoLetters == 'TT' || $firstTwoLetters == 'OT') {
-      $returnArr['catering_food'] = 'CAT-' . $firstTwoLetters;
-    }
-    elseif ($firstLetter == 'T' || $firstLetter == 'A' || $firstLetter == 'E') {
-      $returnArr['catering_food'] = 'CAT-' . $firstLetter;
-    }
-    else {
+    $cateringCode = CRM_Invoicestoexact_ExactHelper::buildCateringCode($eventCode[0]);
+    if ($cateringCode === '') {
       // not valid
       throw new Exception( 'De event code begint niet met TC, TT, OT, T, E of A: ' . $eventCode[0]);
     }
+    $returnArr['catering_food'] = $cateringCode;
 
     return $returnArr;
   }

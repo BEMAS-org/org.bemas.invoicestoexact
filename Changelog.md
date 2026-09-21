@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- New "Catering days" and "Catering rate" (25/65/Exception) custom fields were added to support automated catering line-item pricing; the invoicing fallback now uses catering days (falling back to total event days) instead of always using total event days for catering calculations.
+
 ## 1.0.1
 
 - Label translation was generalized in invoice-note generation: the helper now translates multiple predefined labels by language (including both the training-date label and the participant label), with Dutch as fallback.

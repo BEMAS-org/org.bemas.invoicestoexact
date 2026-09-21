@@ -272,4 +272,32 @@ class CRM_Invoicestoexact_ExactHelper {
     }
   }
 
+  /**
+   * Build the "CAT-<letters>" catering code from an event code (the part of
+   * an event's title before " - "). This is the single source of truth for
+   * the BEMAS catering-code naming convention: TC/TT/OT (two letters) or
+   * T/A/E (one letter) prefixes - both CRM_Invoicestoexact_Form_Task_InvoiceExact::
+   * getExactEventAndCateringCodes() (invoicing) and org.bemas.events'
+   * catering automation (CRM_Events_BemasCatering, via org.bemas.events'
+   * dependency on this extension) call this instead of each keeping their
+   * own copy of the whitelist.
+   *
+   * @param string $eventCode
+   * @return string
+   *   Empty string when the code doesn't match a known prefix - callers
+   *   must treat that as "not a recognised event code", not guess.
+   */
+  static function buildCateringCode($eventCode) {
+    $firstTwoLetters = substr($eventCode, 0, 2);
+    $firstLetter = substr($eventCode, 0, 1);
+
+    if (in_array($firstTwoLetters, ['TC', 'TT', 'OT'], TRUE)) {
+      return 'CAT-' . $firstTwoLetters;
+    }
+    if (in_array($firstLetter, ['T', 'A', 'E'], TRUE)) {
+      return 'CAT-' . $firstLetter;
+    }
+    return '';
+  }
+
 }
