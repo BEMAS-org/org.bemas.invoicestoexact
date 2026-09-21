@@ -1,5 +1,7 @@
 # Changelog
 
+- Restored an on-screen error notification when sending a contribution to Exact fails (e.g. item or cost centre not found): previously the failure was only recorded silently on the contribution's custom fields, with no visible warning that nothing was sent to Exact.
+
 ## 1.0.2
 
 - New "Catering days" and "Catering rate" (25/65/Exception) custom fields were added to support automated catering line-item pricing; the invoicing fallback now uses catering days (falling back to total event days) instead of always using total event days for catering calculations.
