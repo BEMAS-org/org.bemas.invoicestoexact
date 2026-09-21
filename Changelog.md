@@ -1,5 +1,7 @@
 # Changelog
 
+## 1.0.3
+
 - Restored an on-screen error notification when sending a contribution to Exact fails (e.g. item or cost centre not found): previously the failure was only recorded silently on the contribution's custom fields, with no visible warning that nothing was sent to Exact.
 
 ## 1.0.1
