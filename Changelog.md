@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+- Added a settings checkbox ("Log outgoing Exact payload to CiviCRM log", under `civicrm/invoicestoexact/settings`) to log the outgoing invoice payload to the CiviCRM log alongside an actual send to Exact, independent of dry-run mode.
+
 ## 1.0.3
 
 - Restored an on-screen error notification when sending a contribution to Exact fails (e.g. item or cost centre not found): previously the failure was only recorded silently on the contribution's custom fields, with no visible warning that nothing was sent to Exact.

@@ -5,10 +5,22 @@ class CRM_Invoicestoexact_ExactHelper {
   // Set to TRUE only when you want to force dry-run regardless of the Exact Online extension setting.
   public static $dryRunOverride = FALSE;
 
+  // Setting key for logging the outgoing Exact payload while actually sending invoices
+  // (as opposed to dry-run, which logs the payload but does not send anything).
+  const LOG_PAYLOAD_SETTING = 'bemas_invoicestoexact_log_payload';
+
   public static function isDebugDryRunEnabled() {
     $exactOL = new CRM_Exactonline_Utils();
     $isSettingDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
     return self::$dryRunOverride || $isSettingDryRunEnabled;
+  }
+
+  public static function isPayloadLoggingEnabled() {
+    return (bool) Civi::settings()->get(self::LOG_PAYLOAD_SETTING);
+  }
+
+  public static function setPayloadLoggingEnabled($value) {
+    Civi::settings()->set(self::LOG_PAYLOAD_SETTING, !empty($value) ? 1 : 0);
   }
 
   /*
@@ -153,6 +165,12 @@ class CRM_Invoicestoexact_ExactHelper {
           self::saveContributionCustomData($errorMessageCustomFieldId, 'Dry run actief: payload gelogd, factuur niet doorgestuurd naar Exact.', $contributionID);
 
           return TRUE;
+        }
+
+        if (self::isPayloadLoggingEnabled()) {
+          // Log the outgoing payload alongside the actual send (not instead of it, like dry run does).
+          $invoicePayload = json_decode($salesInvoice->json(0, TRUE), TRUE);
+          Civi::log()->debug('Invoicestoexact outgoing payload for contribution ID ' . $contributionID . ': ' . print_r($invoicePayload, TRUE));
         }
 
         // send to Exact!
