@@ -1,5 +1,6 @@
 # Changelog
 
+- Removed the obsolete "invoicestoexact-webhook" page, which led to an error page. The "Versturen facturen naar Exact" menu item pointing to it should be removed by hand from the navigation menu: invoices are sent from the contribution search results via Actions → "Send invoices to Exact".
 - Restored an on-screen error notification when sending a contribution to Exact fails (e.g. item or cost centre not found): previously the failure was only recorded silently on the contribution's custom fields, with no visible warning that nothing was sent to Exact.
 
 ## 1.0.2
