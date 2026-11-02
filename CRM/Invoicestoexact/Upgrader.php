@@ -102,6 +102,18 @@ class CRM_Invoicestoexact_Upgrader extends CRM_Extension_Upgrader_Base {
 
 
   /**
+   * Create the catering rate (dropdown) and catering days custom fields, plus the
+   * catering rate option group, used by the automated catering/event-fee pricing.
+   *
+   * @return TRUE on success
+   */
+  public function upgrade_4204() {
+    $this->ctx->log->info('Applying update 4204: catering rate/days custom fields');
+    CRM_Invoicestoexact_Config::singleton();
+    return TRUE;
+  }
+
+  /**
    * Example: Run an upgrade with a query that touches many (potentially
    * millions) of records by breaking it up into smaller chunks.
    *

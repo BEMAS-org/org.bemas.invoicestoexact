@@ -26,6 +26,9 @@ class CRM_Invoicestoexact_Config {
   private $_eventDetailsCustomGroup = [];
   private $_eventFoodCostCustomField = [];
   private $_eventNumDaysCustomField = [];
+  private $_eventCateringRateOptionGroup = [];
+  private $_eventCateringRateCustomField = [];
+  private $_eventCateringDaysCustomField = [];
 
   private $_participantDetailsCustomGroup = [];
   private $_participantExactIDCustomField = [];
@@ -301,6 +304,8 @@ class CRM_Invoicestoexact_Config {
     // create custom fields if not exists yet
     $this->createEventFoodCostCustomField();
     $this->createEventNumDaysCustomField();
+    $this->createEventCateringRateCustomField();
+    $this->createEventCateringDaysCustomField();
   }
 
   private function createParticipantDetailsCustomGroup() {
@@ -429,6 +434,110 @@ class CRM_Invoicestoexact_Config {
       }
       catch (CiviCRM_API3_Exception $ex) {
         CRM_Core_Error::createError(ts('Could not find or create custom field for num days in ')
+          . __METHOD__ . ' (extension org.bemas.invoicestoexact');
+      }
+    }
+  }
+
+  /**
+   * Method to create or get the option group backing the catering rate dropdown
+   * (values: 25, 65, Exception)
+   */
+  private function createEventCateringRateOptionGroup() {
+    $this->_eventCateringRateOptionGroup = $this->createOptionGroupIfNotExists('bemas_catering_rate', 'BEMAS Catering tarief');
+
+    if (!empty($this->_eventCateringRateOptionGroup['id'])) {
+      $optionValues = [
+        '25' => ['label' => '25', 'value' => '25', 'weight' => 1],
+        '65' => ['label' => '65', 'value' => '65', 'weight' => 2],
+        'Exception' => ['label' => 'Exception', 'value' => 'Exception', 'weight' => 3],
+      ];
+      foreach ($optionValues as $optionValue) {
+        $this->createOptionValueIfLabelNotExists(array_merge($optionValue, [
+          'option_group_id' => $this->_eventCateringRateOptionGroup['id'],
+          'is_active' => 1,
+          'is_reserved' => 1,
+        ]));
+      }
+    }
+  }
+
+  /**
+   * Method to create or get the catering rate custom field (dropdown: 25 / 65 / Exception).
+   * Separate from the legacy bemas_event_food_cost field, which is left untouched.
+   */
+  private function createEventCateringRateCustomField() {
+    $customFieldName = 'bemas_catering_rate';
+
+    $this->createEventCateringRateOptionGroup();
+
+    try {
+      $this->_eventCateringRateCustomField = civicrm_api3('CustomField', 'getsingle', [
+        'name' => $customFieldName,
+        'column_name' => $customFieldName,
+        'custom_group_id' => $this->_eventDetailsCustomGroup['id'],
+      ]);
+    }
+    catch (CiviCRM_API3_Exception $ex) {
+      try {
+        $createdCustomField = civicrm_api3('CustomField', 'create', [
+          'custom_group_id' => $this->_eventDetailsCustomGroup['id'],
+          'name' => $customFieldName,
+          'column_name' => $customFieldName,
+          'label' => 'Catering tarief',
+          'data_type' => 'String',
+          'html_type' => 'Select',
+          'option_group_id' => $this->_eventCateringRateOptionGroup['id'],
+          'is_search_range' => '0',
+          'is_active' => 1,
+          'is_searchable' => 1,
+          'is_view' => 0,
+          'weight' => 11,
+        ]);
+        $this->_eventCateringRateCustomField = $createdCustomField['values'][$createdCustomField['id']];
+      }
+      catch (CiviCRM_API3_Exception $ex) {
+        CRM_Core_Error::createError(ts('Could not find or create custom field for catering rate in ')
+          . __METHOD__ . ' (extension org.bemas.invoicestoexact');
+      }
+    }
+  }
+
+  /**
+   * Method to create or get the catering days custom field.
+   * Distinct from bemas_event_num_days (total event duration): catering may not be
+   * served on every day of a multi-day event.
+   */
+  private function createEventCateringDaysCustomField() {
+    $customFieldName = 'bemas_catering_days';
+
+    try {
+      $this->_eventCateringDaysCustomField = civicrm_api3('CustomField', 'getsingle', [
+        'name' => $customFieldName,
+        'column_name' => $customFieldName,
+        'custom_group_id' => $this->_eventDetailsCustomGroup['id'],
+      ]);
+    }
+    catch (CiviCRM_API3_Exception $ex) {
+      try {
+        $createdCustomField = civicrm_api3('CustomField', 'create', [
+          'custom_group_id' => $this->_eventDetailsCustomGroup['id'],
+          'name' => $customFieldName,
+          'column_name' => $customFieldName,
+          'label' => 'Aantal cateringdagen',
+          'data_type' => 'Int',
+          'html_type' => 'Text',
+          'is_required' => '0',
+          'is_search_range' => '0',
+          'is_active' => 1,
+          'is_searchable' => 1,
+          'is_view' => 0,
+          'weight' => 12,
+        ]);
+        $this->_eventCateringDaysCustomField = $createdCustomField['values'][$createdCustomField['id']];
+      }
+      catch (CiviCRM_API3_Exception $ex) {
+        CRM_Core_Error::createError(ts('Could not find or create custom field for catering days in ')
           . __METHOD__ . ' (extension org.bemas.invoicestoexact');
       }
     }
@@ -932,6 +1041,24 @@ class CRM_Invoicestoexact_Config {
     }
     else {
       return $this->_eventNumDaysCustomField;
+    }
+  }
+
+  public function getEventCateringRateCustomField($key = 'id') {
+    if (!empty($key) && isset($this->_eventCateringRateCustomField[$key])) {
+      return $this->_eventCateringRateCustomField[$key];
+    }
+    else {
+      return $this->_eventCateringRateCustomField;
+    }
+  }
+
+  public function getEventCateringDaysCustomField($key = 'id') {
+    if (!empty($key) && isset($this->_eventCateringDaysCustomField[$key])) {
+      return $this->_eventCateringDaysCustomField[$key];
+    }
+    else {
+      return $this->_eventCateringDaysCustomField;
     }
   }
 

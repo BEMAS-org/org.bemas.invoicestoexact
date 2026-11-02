@@ -1,12 +1,6 @@
 <?xml version="1.0"?>
 <menu>
     <item>
-        <path>civicrm/invoicestoexact-webhook</path>
-        <page_callback>CRM_Invoicestoexact_ExactHelper::redirectUrl</page_callback>
-        <title>Versturen facturen naar Exact</title>
-        <access_arguments>*always allow*</access_arguments>
-    </item>
-    <item>
         <path>civicrm/invoicestoexact/settings</path>
         <page_callback>CRM_Invoicestoexact_Form_Settings</page_callback>
         <title>BEMAS Invoices to Exact Settings</title>
