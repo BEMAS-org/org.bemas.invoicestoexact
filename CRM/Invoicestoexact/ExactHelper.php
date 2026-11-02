@@ -5,10 +5,22 @@ class CRM_Invoicestoexact_ExactHelper {
   // Set to TRUE only when you want to force dry-run regardless of the Exact Online extension setting.
   public static $dryRunOverride = FALSE;
 
+  // Setting key for logging the outgoing Exact payload while actually sending invoices
+  // (as opposed to dry-run, which logs the payload but does not send anything).
+  const LOG_PAYLOAD_SETTING = 'bemas_invoicestoexact_log_payload';
+
   public static function isDebugDryRunEnabled() {
     $exactOL = new CRM_Exactonline_Utils();
     $isSettingDryRunEnabled = method_exists($exactOL, 'getInvoicePayloadDebugEnabled') && $exactOL->getInvoicePayloadDebugEnabled();
     return self::$dryRunOverride || $isSettingDryRunEnabled;
+  }
+
+  public static function isPayloadLoggingEnabled() {
+    return (bool) Civi::settings()->get(self::LOG_PAYLOAD_SETTING);
+  }
+
+  public static function setPayloadLoggingEnabled($value) {
+    Civi::settings()->set(self::LOG_PAYLOAD_SETTING, !empty($value) ? 1 : 0);
   }
 
   /*
@@ -155,6 +167,12 @@ class CRM_Invoicestoexact_ExactHelper {
           return TRUE;
         }
 
+        if (self::isPayloadLoggingEnabled()) {
+          // Log the outgoing payload alongside the actual send (not instead of it, like dry run does).
+          $invoicePayload = json_decode($salesInvoice->json(0, TRUE), TRUE);
+          Civi::log()->debug('Invoicestoexact outgoing payload for contribution ID ' . $contributionID . ': ' . print_r($invoicePayload, TRUE));
+        }
+
         // send to Exact!
         $s = $salesInvoice->insert();
 
@@ -286,8 +304,8 @@ class CRM_Invoicestoexact_ExactHelper {
   /**
    * Build the "CAT-<letters>" catering code from an event code (the part of
    * an event's title before " - "). This is the single source of truth for
-   * the BEMAS catering-code naming convention: TC/TT/OT (two letters) or
-   * T/A/E (one letter) prefixes - both CRM_Invoicestoexact_Form_Task_InvoiceExact::
+   * the BEMAS catering-code naming convention: TC/OT (two letters) or
+   * T/A/E (one letter) prefixes, with TT mapped to CAT-T - both CRM_Invoicestoexact_Form_Task_InvoiceExact::
    * getExactEventAndCateringCodes() (invoicing) and org.bemas.events'
    * catering automation (CRM_Events_BemasCatering, via org.bemas.events'
    * dependency on this extension) call this instead of each keeping their
@@ -302,7 +320,10 @@ class CRM_Invoicestoexact_ExactHelper {
     $firstTwoLetters = substr($eventCode, 0, 2);
     $firstLetter = substr($eventCode, 0, 1);
 
-    if (in_array($firstTwoLetters, ['TC', 'TT', 'OT'], TRUE)) {
+    if ($firstTwoLetters === 'TT') {
+      return 'CAT-T'; // exception Emilie dd. 18 September 2026
+    }
+    if (in_array($firstTwoLetters, ['TC', 'OT'], TRUE)) {
       return 'CAT-' . $firstTwoLetters;
     }
     if (in_array($firstLetter, ['T', 'A', 'E'], TRUE)) {

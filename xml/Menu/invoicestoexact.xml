@@ -1,3 +1,9 @@
 <?xml version="1.0"?>
 <menu>
+    <item>
+        <path>civicrm/invoicestoexact/settings</path>
+        <page_callback>CRM_Invoicestoexact_Form_Settings</page_callback>
+        <title>BEMAS Invoices to Exact Settings</title>
+        <access_arguments>administer CiviCRM</access_arguments>
+    </item>
 </menu>

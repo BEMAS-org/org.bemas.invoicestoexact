@@ -1,11 +1,18 @@
 # Changelog
 
-- Removed the obsolete "invoicestoexact-webhook" page, which led to an error page. The "Versturen facturen naar Exact" menu item pointing to it should be removed by hand from the navigation menu: invoices are sent from the contribution search results via Actions → "Send invoices to Exact".
-- Restored an on-screen error notification when sending a contribution to Exact fails (e.g. item or cost centre not found): previously the failure was only recorded silently on the contribution's custom fields, with no visible warning that nothing was sent to Exact.
-
-## 1.0.2
+## 1.0.5
 
 - New "Catering days" and "Catering rate" (25/65/Exception) custom fields were added to support automated catering line-item pricing; the invoicing fallback now uses catering days (falling back to total event days) instead of always using total event days for catering calculations.
+- The catering article code rules (including the TT → CAT-T exception) now live in a single shared helper, also used by the org.bemas.events catering automation.
+- Removed the obsolete "invoicestoexact-webhook" page, which led to an error page. The "Versturen facturen naar Exact" menu item pointing to it should be removed by hand from the navigation menu: invoices are sent from the contribution search results via Actions → "Send invoices to Exact".
+
+## 1.0.4
+
+- Added a settings checkbox ("Log outgoing Exact payload to CiviCRM log", under `civicrm/invoicestoexact/settings`) to log the outgoing invoice payload to the CiviCRM log alongside an actual send to Exact, independent of dry-run mode.
+
+## 1.0.3
+
+- Restored an on-screen error notification when sending a contribution to Exact fails (e.g. item or cost centre not found): previously the failure was only recorded silently on the contribution's custom fields, with no visible warning that nothing was sent to Exact.
 
 ## 1.0.1
 
